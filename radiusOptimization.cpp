@@ -41,8 +41,8 @@ tuple<double, double, double, double> fitCircleRound(const vector<double>& x_val
     VectorXd b(n);
 
     for (int i = 0; i < n; ++i) {
-        A(i, 0) = -2 * x_values[i];
-        A(i, 1) = -2 * z_values[i];
+        A(i, 0) = 2 * x_values[i];
+        A(i, 1) = 2 * z_values[i];
         A(i, 2) = 1;
         b(i) = x_values[i] * x_values[i] + z_values[i] * z_values[i];
     }
@@ -59,18 +59,12 @@ tuple<double, double, double, double> fitCircleRound(const vector<double>& x_val
 
 // Calculate the line of best fit within the object
 Vector3d lineOfBestFit(const vector<Vector3d>& points, const string& filename, const Vector3d& center) {
-    //Vector3d centroid = Vector3d::Zero();
     Matrix3d covariance = Matrix3d::Zero();
     ofstream outputFile(filename);
 
     if (!outputFile.is_open()) {
         cerr << "Error: Unable to open file for writing." << endl;
     }
-
-    /*for (const auto& point : points) {
-        centroid += point;
-    }
-    centroid /= points.size();*/
 
     for (const auto& point : points) {
         Vector3d deviation = point - center;
@@ -97,7 +91,7 @@ Vector3d lineOfBestFit(const vector<Vector3d>& points, const string& filename, c
     return direction_vector;
 }
 
-void PrintCircle(const Vector3d& CenterPoint, const double& radius, ofstream filestream) {
+void PrintCircle(const Vector3d& CenterPoint, const double& radius, ofstream& filestream) {
     for (double theta = 0; theta <= 2*M_PI; theta += 2 * M_PI/1000) { // Adjust spacing as needed
         double y = CenterPoint.y();
         double x = CenterPoint.x() + radius * sin(theta);
@@ -114,6 +108,7 @@ int main() {
     vector<Vector3d> data_points;
     Vector3d center = Vector3d::Zero();
     double smallest_radius = 0.0;
+    ofstream outputFile("radiusOfEachCircle.txt");
 
     for (string line; getline(file, line);) {
         istringstream iss(line);
@@ -136,9 +131,10 @@ int main() {
 		circleParams.push_back(fitCircleRound(x_values, z_values, y_value)); // choose either fitCircleFlat or fitCircleRound depending on input data
 		cout << "Circle Center (x0, y0, z0): " << get<0>(circleParams.back()) << ", " << get<3>(circleParams.back()) << ", " << get<1>(circleParams.back()) << endl;
 		cout << "Circle Radius: " << get<2>(circleParams.back()) << endl;
+
+		PrintCircle(Vector3d(get<0>(circleParams.back()), get<3>(circleParams.back()), get<1>(circleParams.back())), get<2>(circleParams.back()), outputFile);
     }
 
-	// find the smallest radius within circleParams and return all circle parameters
 	for (const auto& circle : circleParams) {
 		if (get<2>(circle) < smallest_radius || smallest_radius == 0) {
 			center << get<0>(circle), get<3>(circle), get<1>(circle);
@@ -146,13 +142,10 @@ int main() {
         }
 	}
 
-	cout << "Smallest radius: " << smallest_radius << endl;
+    cout << "Smallest radius: " << smallest_radius << endl;
 	cout << "Center of smallest circle:\n" << center << endl;
 
     Vector3d LBF = lineOfBestFit(data_points, "lineOfBestFitRoundCentroid.txt", center);
-
-    ofstream outputFile("centerPoint.txt");
-	outputFile << center.x() << " " << center.y() << " " << center.z() << endl;
 
     return 0;
 }
