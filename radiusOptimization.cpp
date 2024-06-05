@@ -82,10 +82,11 @@ Vector3d lineOfBestFit(const vector<Vector3d>& points, const string& filename, c
     Vector3d direction_vector = svd.matrixU().col(0);
 
     cout << "Direction vector of the line:\n" << direction_vector << endl;
-
+    direction_vector.normalize();
     for (double y = -360.0; y <= 360.0; y += 1.2) { // Adjust spacing as needed
-        double x = center.x() + direction_vector.x() * y;
-        double z = center.z() + direction_vector.z() * y;
+        double fy = (y - center.y()) / direction_vector.y();
+        double x = center.x() + direction_vector.x() * fy;
+        double z = center.z() + direction_vector.x() * fy;
         outputFile << std::setprecision(10) << x << " " << y << " " << z << endl;
     }
 
@@ -94,6 +95,7 @@ Vector3d lineOfBestFit(const vector<Vector3d>& points, const string& filename, c
 
     return direction_vector;
 }
+
 
 int main() {
 	ifstream file("outputCenteredLogRound.txt");
