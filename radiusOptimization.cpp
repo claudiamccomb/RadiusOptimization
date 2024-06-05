@@ -1,3 +1,4 @@
+#define _USE_MATH_DEFINES
 #include <iostream>
 #include <vector>
 #include <tuple>
@@ -96,6 +97,14 @@ Vector3d lineOfBestFit(const vector<Vector3d>& points, const string& filename, c
     return direction_vector;
 }
 
+void PrintCircle(const Vector3d& CenterPoint, const double& radius, ofstream filestream) {
+    for (double theta = 0; theta <= 2*M_PI; theta += 2 * M_PI/1000) { // Adjust spacing as needed
+        double y = CenterPoint.y();
+        double x = CenterPoint.x() + radius * sin(theta);
+        double z = CenterPoint.z() + radius * cos(theta);
+        filestream << std::setprecision(10) << x << " " << y << " " << z << endl;
+    }
+}
 
 int main() {
 	ifstream file("outputCenteredLogRound.txt");
