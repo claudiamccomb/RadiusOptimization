@@ -91,6 +91,143 @@ Vector3d lineOfBestFit(const vector<Vector3d>& points, const string& filename, c
     return direction_vector;
 }
 
+Vector3d projectPointOntoPlane(const Vector3d& point, const Vector3d& planePoint, const Vector3d& planeNormal) {
+	Vector3d v = point - planePoint;
+	double distance = v.dot(planeNormal);
+	return point - distance * planeNormal;
+}
+
+/// <summary>
+/// expands a cylinder to its maximum radius within the pointcloud
+/// </summary>
+/// <param name="pointCloud">Log Data</param>
+/// <param name="planePoint">Point to anchor the planar projection (Center of smallest circle)</param>
+/// <param name="planeNormal">Normal vector to the plane (Direction vector of linear interpolation)</param>
+/// <returns></returns>
+Vector4d ExpandCylinder(const std::vector<Vector3d>& pointCloud,
+	const Vector3d& planePoint,
+	const Vector3d& planeNormal) {
+
+	Vector3d Uguess(0, 0, 1);
+	Vector3d U1 = Uguess - Uguess.dot(planeNormal) * planeNormal;
+	U1.normalize();
+	Vector3d V1 = U1.cross(planeNormal);
+	V1.normalize();
+	MatrixXd UV = MatrixXd(2, 3);
+	UV << U1.transpose(), V1.transpose();
+
+	ofstream outfile("2dprojectpoints.txt");
+	std::vector<Vector2d> projectedPoints;
+	for (const auto& point : pointCloud) {
+		Vector3d projectedPoint = projectPointOntoPlane(point, planePoint, planeNormal);
+		projectedPoints.push_back(UV * projectedPoint);
+		outfile << projectedPoints.back()(0) << " " << projectedPoints.back()(1) << " " << "0" << endl;
+	}
+	outfile.close();
+
+	//Expand circle to first point
+	double radius = 10000;
+	Vector2d CircleCenter = UV * planePoint;
+
+	Vector2d closestPoint1;
+	for (const auto& point : projectedPoints) {
+		double distance = (point - CircleCenter).norm();
+		if (distance < radius) {
+			radius = distance;
+			closestPoint1 = point;
+		}
+	}
+
+	ofstream outfile2("2dCircle and center initial.txt");
+	outfile2 << std::setprecision(10) << CircleCenter(0) << " " << CircleCenter(1) << " " << 0 << endl;
+	for (double theta = 0; theta <= 2 * M_PI; theta += 2 * M_PI / 1000) { // Adjust spacing as needed
+		double x = CircleCenter(0) + radius * sin(theta);
+		double y = CircleCenter(1) + radius * cos(theta);
+		double z = 0;
+		outfile2 << std::setprecision(10) << x << " " << y << " " << z << endl;
+	}
+	outfile2.close();
+
+	//expand circle to second point
+	Vector2d du;
+	du(0) = CircleCenter(0) - closestPoint1(0);
+	du(1) = CircleCenter(1) - closestPoint1(1);
+	du.normalize();
+	double closestdistance1 = 10000;
+	Vector2d closestPoint2;
+	for (const auto& point : projectedPoints) {
+		double distance = -(pow((closestPoint1(0) - point(0)), 2) + pow((closestPoint1(1) - point(1)), 2)) / (2 * du(0) * (closestPoint1(0) - point(0)) + 2 * du(1) * (closestPoint1(1) - point(1)));
+		if (distance < closestdistance1 && distance>0) {
+			closestdistance1 = distance;
+			closestPoint2 = point;
+		}
+	}
+	radius = closestdistance1;
+	CircleCenter = du.array() * radius + closestPoint1.array();
+
+	ofstream outfile3("2dCircle and center halfway.txt");
+	outfile3 << std::setprecision(10) << CircleCenter(0) << " " << CircleCenter(1) << " " << 0 << endl;
+	for (double theta = 0; theta <= 2 * M_PI; theta += 2 * M_PI / 1000) { // Adjust spacing as needed
+		double x = CircleCenter(0) + radius * sin(theta);
+		double y = CircleCenter(1) + radius * cos(theta);
+		double z = 0;
+		outfile3 << std::setprecision(10) << x << " " << y << " " << z << endl;
+	}
+	outfile3.close();
+
+	//expand to third point
+	Vector2d v = (closestPoint2 - closestPoint1).normalized();
+	Vector2d BasePoint = (closestPoint1 + closestPoint2) / 2;
+	du = (CircleCenter - BasePoint).normalized();
+	//Vector2d BasePoint = CircleCenter - radius * du;
+
+	double currentDistance = (CircleCenter - BasePoint).norm();
+
+	double closestdistance2 = 10000;
+	Vector2d closestPoint3;
+	for (const auto& point : projectedPoints) {
+		//calculate perpendicular bisector
+		Vector2d midpoint = (closestPoint1 + point) / 2.0;
+		Vector2d direction_vector = point - closestPoint1;
+
+		// Calculate direction vector of the perpendicular bisector
+		Vector2d bisector_vector = Vector2d(-direction_vector.y(), direction_vector.x());
+		// The perpendicular bisector passes through the midpoint
+		Vector2d bisector_point = midpoint;
+
+		double denominator = du.x() * bisector_vector.y() - du.y() * bisector_vector.x();
+		Vector2d diff = bisector_point - BasePoint;
+		double distance = (diff.x() * bisector_vector.y() - diff.y() * bisector_vector.x()) / denominator;
+
+		if (distance < closestdistance2 && distance>currentDistance && point != closestPoint1 && point != closestPoint2) {
+			closestdistance2 = distance;
+			closestPoint3 = point;
+		}
+	}
+
+	CircleCenter = du.array() * closestdistance2 + BasePoint.array();
+
+	radius = (closestPoint3 - CircleCenter).norm();
+
+	//double test1 = (closestPoint1 - CircleCenter).norm();
+	ofstream outfile4("2dCircle and center final.txt");
+	outfile4 << std::setprecision(10) << CircleCenter(0) << " " << CircleCenter(1) << " " << 0 << endl;
+	for (double theta = 0; theta <= 2 * M_PI; theta += 2 * M_PI / 1000) { // Adjust spacing as needed
+		double x = CircleCenter(0) + radius * sin(theta);
+		double y = CircleCenter(1) + radius * cos(theta);
+		double z = 0;
+		outfile4 << std::setprecision(10) << x << " " << y << " " << z << endl;
+	}
+	outfile4.close();
+
+	//turn center back to 3d point and return it
+	Vector3d newCenter = Vector3d::Zero(3);//UV.inverse() * CircleCenter;
+	newCenter = U1 * CircleCenter(0) + V1 * CircleCenter(1);
+	Vector4d results;
+	results << newCenter, radius;
+	return results;
+}
+
 void PrintCircle(const Vector3d& CenterPoint, const double& radius, ofstream& filestream) {
     for (double theta = 0; theta <= 2*M_PI; theta += 2 * M_PI/1000) { // Adjust spacing as needed
         double y = CenterPoint.y();
@@ -146,6 +283,40 @@ int main() {
 	cout << "Center of smallest circle:\n" << center << endl;
 
     Vector3d LBF = lineOfBestFit(data_points, "lineOfBestFitRoundCentroid.txt", center);
+
+
+	//Calling the cylinder function
+	Vector4d projectedpoints = ExpandCylinder(data_points, LineStart, LineDirection);
+
+	LineStart = projectedpoints.head<3>();
+
+	double radius = projectedpoints(3);
+
+
+	ofstream outfilestream("cylinderPoints.txt");
+
+	for (int i = -500; i < 500; ++i) {
+		Vector3d point = LineStart + i * (LineDirection); // Equally spaced points along the line
+		for (double theta = 0; theta <= 2 * M_PI; theta += 2 * M_PI / 1000) { // Adjust spacing as needed
+			Vector3d initialPoint;
+			initialPoint.y() = 0/*point.y()*/;
+			initialPoint.x() = /*point.x()*/ radius * sin(theta);
+			initialPoint.z() = /*point.z()*/ radius * cos(theta);
+
+			double yaw = atan(LineDirection.x() / LineDirection.y());
+			double pitch = atan(LineDirection.z() / sqrt((LineDirection.x() * LineDirection.x()) + (LineDirection.y() * LineDirection.y())));
+			double roll = 0;
+			Matrix3d Rx, Ry, Rz;
+			Rx << 1, 0, 0, 0, cos(pitch), -sin(pitch), 0, sin(pitch), cos(pitch);
+			Ry << cos(yaw), 0, sin(yaw), 0, 1, 0, -sin(yaw), 0, cos(yaw);
+			Rz << cos(roll), -sin(roll), 0, sin(roll), cos(roll), 0, 0, 0, 1;
+
+			Vector3d rotated_point = Rz * Ry * Rx * initialPoint;
+			rotated_point += point;
+			outfilestream << std::setprecision(10) << rotated_point(0) << " " << rotated_point(1) << " " << rotated_point(2) << endl;
+		}
+	}
+	outfilestream.close();
 
     return 0;
 }
