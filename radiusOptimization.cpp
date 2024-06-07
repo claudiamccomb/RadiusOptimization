@@ -60,11 +60,7 @@ tuple<double, double, double, double> fitCircleRound(const vector<double>& x_val
 // Calculate the line of best fit within the object
 Vector3d lineOfBestFit(const vector<Vector3d>& points, const Vector3d& center, const string& filename) {
     Matrix3d covariance = Matrix3d::Zero();
-    ofstream outputFile(filename);
-
-    if (!outputFile.is_open()) {
-        cerr << "Error: Unable to open file for writing." << endl;
-    }
+    ofstream outfile(filename);
 
     for (const auto& point : points) {
         Vector3d deviation = point - center;
@@ -82,12 +78,10 @@ Vector3d lineOfBestFit(const vector<Vector3d>& points, const Vector3d& center, c
         double fy = (y - center.y()) / direction_vector.y();
         double x = center.x() + direction_vector.x() * fy;
         double z = center.z() + direction_vector.x() * fy;
-        outputFile << std::setprecision(10) << x << " " << y << " " << z << endl;
+		outfile << std::setprecision(10) << x << " " << y << " " << z << endl;
     }
 
-    outputFile.close();
-    cout << "Points written to file: " << filename << endl;
-
+	outfile.close();
     return direction_vector;
 }
 
@@ -209,7 +203,6 @@ Vector4d ExpandCylinder(const std::vector<Vector3d>& pointCloud,
 
 	radius = (closestPoint3 - CircleCenter).norm();
 
-	//double test1 = (closestPoint1 - CircleCenter).norm();
 	ofstream outfile4("2dCircle and center final.txt");
 	outfile4 << std::setprecision(10) << CircleCenter(0) << " " << CircleCenter(1) << " " << 0 << endl;
 	for (double theta = 0; theta <= 2 * M_PI; theta += 2 * M_PI / 1000) { // Adjust spacing as needed
@@ -237,14 +230,14 @@ void PrintCircle(const Vector3d& CenterPoint, const double& radius, ofstream& fi
     }
 }
 
-// formats a matrix of radii from block files into cartesian coordinates
+// formats a matrix of radii from block files and converts the data into cartesian coordinates
 vector<Vector3d> reformatBlocks(ifstream& file) {
 	int rows, cols;
 	file >> rows >> cols;
 	file.ignore();
 
 	double angleInc = 360.0 / rows;
-	double lengthInc = 101.0 / cols;
+	double lengthInc = 101.0 / 32; // divide between 32 lasers
 	vector<Vector3d> xyzData;
 	double angle = 0.0;
 
@@ -269,21 +262,23 @@ vector<Vector3d> reformatBlocks(ifstream& file) {
 }
 
 int main() {
-	//string filename = "outputCenteredLogRound.txt";
-	string filename = "Block_G.Blk";
+	string filename = "outputCenteredLogRound.txt";
 	ifstream file(filename);
 	map<double, vector<double>> column_groups_first;
 	map<double, vector<double>> column_groups_third;
 	vector<Vector3d> data_points;
 
+	// if the input is a block file, reformat the data
 	if (filename.find("Blk") != string::npos || filename.find("blk") != string::npos) {
 		vector<Vector3d> blockPoints = reformatBlocks(file);
-		ofstream blockfile("blockPoints.txt");
+		ofstream outfile("blockPoints.txt");
 
 		// write data to file for CloudCompare visualization
 		for (int i = 0; i < blockPoints.size(); ++i) {
-			blockfile << blockPoints[i][0] << " " << blockPoints[i][1] << " " << blockPoints[i][2] << endl;
+			outfile << blockPoints[i][0] << " " << blockPoints[i][1] << " " << blockPoints[i][2] << endl;
 		}
+
+		outfile.close();
 
 		// read into column_groups_first and column_groups_third for circle fitting
 		for (const auto& point : blockPoints) {
@@ -296,6 +291,7 @@ int main() {
 		for (string line; getline(file, line);) {
 			istringstream iss(line);
 			double first_value, second_value, third_value;
+
 			// group data by rings on the y-axis
 			if (iss >> first_value >> second_value >> third_value) {
 				column_groups_first[second_value].push_back(first_value);
@@ -316,8 +312,10 @@ int main() {
 		cout << "Circle Center (x0, y0, z0): " << get<0>(circleParams.back()) << ", " << get<3>(circleParams.back()) << ", " << get<1>(circleParams.back()) << endl;
 		cout << "Circle Radius: " << get<2>(circleParams.back()) << endl;
 
-		ofstream outputFile("radiusOfEachCircle.txt");
-		PrintCircle(Vector3d(get<0>(circleParams.back()), get<3>(circleParams.back()), get<1>(circleParams.back())), get<2>(circleParams.back()), outputFile);
+		// visualize the circles of best fit for CloudCompare
+		// ofstream radiusOutputFile("radiusOfEachCircle.txt");
+		// PrintCircle(Vector3d(get<0>(circleParams.back()), get<3>(circleParams.back()), get<1>(circleParams.back())), get<2>(circleParams.back()), outputFile);
+		// radiusOutputFile.close();
     }
 
 	Vector3d center = Vector3d::Zero();
@@ -337,7 +335,7 @@ int main() {
 	Vector4d projectedpoints = ExpandCylinder(data_points, center, LBF);
 	center = projectedpoints.head<3>();
 	double radius = projectedpoints(3);
-	ofstream outfilestream("cylinderPoints.txt");
+	ofstream outfile("cylinderPoints.txt");
 
 	for (int i = -500; i < 500; ++i) {
 		Vector3d point = center + i * (LBF); // Equally spaced points along the line
@@ -357,10 +355,10 @@ int main() {
 
 			Vector3d rotated_point = Rz * Ry * Rx * initialPoint;
 			rotated_point += point;
-			outfilestream << std::setprecision(10) << rotated_point(0) << " " << rotated_point(1) << " " << rotated_point(2) << endl;
+			outfile << std::setprecision(10) << rotated_point(0) << " " << rotated_point(1) << " " << rotated_point(2) << endl;
 		}
 	}
-	outfilestream.close();
+	outfile.close();
 
     return 0;
 }
